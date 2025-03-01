@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vehicle Booking</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; }
+        .green { color: green; font-weight: bold; }
+        .red { color: red; font-weight: bold; }
+        .container { max-width: 600px; margin: auto; }
+        .search-box input, .search-box select { width: 100%; padding: 8px; margin: 5px 0; }
+        .buttons { margin: 15px 0; }
+        .buttons button { padding: 10px; margin: 5px; }
+        .vehicle-entry { padding: 10px; border-bottom: 1px solid #ddd; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+    <h2>Available Vehicles</h2>
+
+    <div class="buttons">
+        <button onclick="window.location.href='register.html'">Register</button>
+        <button onclick="window.location.href='update.html'">Update</button>
+    </div>
+
+    <div class="search-box">
+        <input type="text" id="searchInput" placeholder="Search by Name" oninput="filterVehicles()">
+<input type="date" id="searchDate" onchange="filterVehicles()">
+<input type="time" id="searchStartTime" onchange="filterVehicles()">
+<input type="time" id="searchEndTime" onchange="filterVehicles()">
+
+    </div>
+
+    <div class="container" id="vehicleList"></div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", loadVehicles);
+
+        function loadVehicles() {
+            let users = JSON.parse(localStorage.getItem("users")) || [];
+            updateAvailability(users);
+            displayVehicles(users);
+        }
+
+        function updateAvailability(users) {
+            let now = new Date();
+            let next24hrs = new Date();
+            next24hrs.setHours(next24hrs.getHours() + 24);
+
+            users.forEach(user => {
+                let isBooked = user.confirmedBookings?.some(req => {
+                    let start = new Date(`${req.date}T${req.startTime}`);
+                    let end = new Date(`${req.date}T${req.endTime}`);
+                    return start <= next24hrs && end >= now;
+                });
+
+                user.available = !isBooked;
+            });
+
+            localStorage.setItem("users", JSON.stringify(users));
+        }
+
+        function displayVehicles(users) {
+            let vehicleList = document.getElementById("vehicleList");
+            vehicleList.innerHTML = "";
+
+            users.sort((a, b) => b.available - a.available);
+
+            users.forEach((user, index) => {
+                let div = document.createElement("div");
+                div.className = "vehicle-entry";
+                div.innerHTML = `
+                    <p>
+                        <strong class="owner-name">${user.username}</strong> 
+                        <span id="status-${index}" class="${user.available ? 'green' : 'red'}">⬤</span> |
+                        <a href="tel:${user.phone}"><button>Call</button></a>
+                        <button onclick="showBookingForm(${index})">Book</button>
+                    </p>
+
+                    <div id="booking-form-${index}" class="hidden">
+                        <input type="text" id="booking-name-${user.username}" placeholder="Your Name">
+
+                        <input type="date" id="booking-date-${index}">
+                        <input type="time" id="booking-start-time-${index}">
+                        <input type="time" id="booking-end-time-${index}">
+                        <button onclick="requestBooking(${index})">Request</button>
+                    </div>
+
+                    <p><strong>Booking Requests:</strong></p>
+                    <ul id="request-list-${index}">
+                        ${user.bookingRequests && user.bookingRequests.length > 0 ? 
+                            user.bookingRequests.map(req => `  
+                                <li>${req.name}, ${req.date}, ${req.startTime} - ${req.endTime} 
+                                    <button onclick="showConfirmBox(${index}, '${req.name}')">Confirm</button>
+                                    <button onclick="showCancelBox(${index}, '${req.name}')">Cancel</button>
+                                </li>
+                            `).join('') : "<li>No booking requests yet.</li>"
+                        }
+                    </ul>
+
+                    <p><strong>Confirmed Bookings:</strong></p>
+                    <ul id="confirmed-list-${index}">
+                        ${user.confirmedBookings && user.confirmedBookings.length > 0 ? 
+                            user.confirmedBookings.map(req => `  
+                                <li>${req.name}, ${req.date} (${getDayName(req.date)}), ${req.startTime} - ${req.endTime} ✅
+                                    <button onclick="showDeleteBox(${index}, '${req.name}')">Delete</button>
+                                </li>
+                            `).join('') : "<li>No confirmed bookings yet.</li>"
+                        }
+                    </ul>
+                `;
+                vehicleList.appendChild(div);
+            });
+        }
+
+        function getDayName(dateString) {
+            const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+            return days[new Date(dateString).getDay()];
+        }
+
+        function filterVehicles() { 
+    let nameInput = document.getElementById("searchInput").value.toLowerCase();
+    let dateInput = document.getElementById("searchDate").value;
+    let startTimeInput = document.getElementById("searchStartTime").value;
+    let endTimeInput = document.getElementById("searchEndTime").value;
+    let users = JSON.parse(localStorage.getItem("users")) || [];
+
+    let filteredUsers = users.filter(user => {
+        let matchesName = nameInput ? user.username.toLowerCase().includes(nameInput) : true;
+        let isAvailableOnDate = true;
+        let isAvailableOnTime = true;
+
+        // If a date is entered, filter out vehicles that have any booking on that date
+        if (dateInput) {
+            isAvailableOnDate = !user.confirmedBookings.some(req => req.date === dateInput);
+        }
+
+        // If time is also entered, filter vehicles that are free during that slot
+        if (dateInput && startTimeInput && endTimeInput) {
+            isAvailableOnTime = user.confirmedBookings.every(req => {
+                if (req.date !== dateInput) return true; // Ignore different dates
+
+                let bookedStart = new Date(`${req.date}T${req.startTime}`);
+                let bookedEnd = new Date(`${req.date}T${req.endTime}`);
+                let searchStart = new Date(`${dateInput}T${startTimeInput}`);
+                let searchEnd = new Date(`${dateInput}T${endTimeInput}`);
+
+                return searchEnd <= bookedStart || searchStart >= bookedEnd;
+            });
+        }
+
+        return matchesName && isAvailableOnDate && isAvailableOnTime;
+    });
+
+    displayVehicles(filteredUsers);
+}
+
+
+
+// Function to get day name from date
+function getDayName(dateString) {
+    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    return days[new Date(dateString).getDay()];
+}
+
+
+
+        function showBookingForm(index) {
+            document.getElementById(`booking-form-${index}`).classList.toggle("hidden");
+        }
+
+        function showConfirmBox(index, name) {
+            if (confirm(`Confirm booking for ${name}?`)) {
+                confirmBooking(index, name);
+            }
+        }
+
+        function showCancelBox(index, name) {
+            if (confirm(`Cancel booking request for ${name}?`)) {
+                cancelBooking(index, name);
+            }
+        }
+
+        function showDeleteBox(index, name) {
+            if (confirm(`Delete confirmed booking for ${name}?`)) {
+                deleteConfirmedBooking(index, name);
+            }
+        }
+
+        function requestBooking(index) {
+            let users = JSON.parse(localStorage.getItem("users")) || [];
+            let user = users[index];
+            let name = document.getElementById(`booking-name-${index}`).value;
+            let date = document.getElementById(`booking-date-${index}`).value;
+            let startTime = document.getElementById(`booking-start-time-${index}`).value;
+            let endTime = document.getElementById(`booking-end-time-${index}`).value;
+
+            if (!name || !date || !startTime || !endTime) {
+                alert("Please fill all fields!");
+                return;
+            }
+
+            if (!user.bookingRequests) user.bookingRequests = [];
+            user.bookingRequests.push({ name, date, startTime, endTime });
+
+            localStorage.setItem("users", JSON.stringify(users));
+            loadVehicles();
+        }
+    </script>
+    <script src="script.js"></script>
+
+</body>
+</html>
