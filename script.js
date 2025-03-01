@@ -121,7 +121,29 @@ function cancelBooking(ownerIndex, requesterName) {
     alert("Booking request canceled!");
     loadVehicles();
 }
+// ✅ Delete Confirmed Booking (asks for password)
+function deleteConfirmedBooking(index, requesterName) {
+    let users = JSON.parse(localStorage.getItem("users")) || [];
+    let user = users[index];
 
+    let enteredPassword = prompt("Enter your password to delete this confirmed booking:");
+    if (enteredPassword !== user.password) {
+        alert("Incorrect password. Cannot delete booking.");
+        return;
+    }
+
+    let bookingIndex = user.confirmedBookings.findIndex(req => req.name === requesterName);
+    if (bookingIndex === -1) {
+        alert("Booking not found.");
+        return;
+    }
+
+    user.confirmedBookings.splice(bookingIndex, 1); // Remove confirmed booking
+    localStorage.setItem("users", JSON.stringify(users));
+
+    alert("Confirmed booking deleted!");
+    loadVehicles(); // Refresh UI
+}
 // ✅ Display vehicles dynamically
 // ✅ Display vehicles dynamically (Fixed)
 function displayVehicles(users) {
